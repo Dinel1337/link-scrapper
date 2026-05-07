@@ -1,0 +1,29 @@
+[project]
+name = "link-scrapper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "alarmlie", email = "alarmlie@student.21-school.ru" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "psycopg2-binary>=2.9.12",
+    "pynput>=1.8.1",
+    "selenium>=4.43.0",
+    "sqlalchemy>=2.0.49",
+]
+
+[project.scripts]
+link-scrapper = "link_scrapper:main"
+
+[build-system]
+requires = ["uv_build>=0.11.11,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.12",
+]
