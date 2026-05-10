@@ -3,6 +3,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from link_scrapper.domain.models import Base
+from contextlib import contextmanager
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -15,3 +16,14 @@ SessionLocal = sessionmaker(bind=engine)
 def init_db():
     """Создаёт все таблицы (для разработки)."""
     Base.metadata.create_all(bind=engine)
+
+@contextmanager
+def connect_db():
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+    finally:
+        session.close()
