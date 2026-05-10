@@ -1,4 +1,3 @@
-"""Команды CQRS."""
 from dataclasses import dataclass
 
 @dataclass

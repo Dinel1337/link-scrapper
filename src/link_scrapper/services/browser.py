@@ -1,40 +1,26 @@
-"""Взаимодействие с браузером через CDP."""
-from playwright.sync_api import sync_playwright
-
-CDP_URL = "http://localhost:9222"
+import requests
 
 def get_current_url() -> str | None:
-    """Получить URL активной вкладки."""
+    """Возвращает URL активной вкладки Edge."""
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(CDP_URL)
-            contexts = browser.contexts
-            if not contexts:
-                return None
-            pages = contexts[0].pages
-            if not pages:
-                return None
-            url = pages[-1].url
-            browser.close()
-            return url
+        resp = requests.get("http://127.0.0.1:9222/json")
+        pages = resp.json()
+        web_pages = [p for p in pages if p.get("type") == "page"]
+        if web_pages:
+            return web_pages[0]["url"]
     except Exception as e:
-        print(f"Error getting URL: {e}")
-        return None
+        print(f"Ошибка получения URL: {e}")
+    return None
 
-def open_url(url: str) -> bool:
-    """Открыть URL в текущей вкладке."""
+def open_url(url: str) -> None:
+    """Открывает URL в активной вкладке через Playwright CDP."""
+    from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(CDP_URL)
-            contexts = browser.contexts
-            if not contexts:
-                return False
-            pages = contexts[0].pages
-            if not pages:
-                return False
-            pages[-1].goto(url)
-            browser.close()
-            return True
+            browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+            pages = browser.contexts[0].pages if browser.contexts else []
+            if pages:
+                pages[-1].goto(url)
+                browser.close()
     except Exception as e:
-        print(f"Error opening URL: {e}")
-        return False
+        print(f"Ошибка открытия URL: {e}")

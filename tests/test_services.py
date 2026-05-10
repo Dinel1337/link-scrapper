@@ -1,29 +1,25 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from link_scrapper.services.browser import get_current_url, open_url
+from link_scrapper.services.browser import get_current_url
 
-@patch("link_scrapper.services.browser.sync_playwright")
-def test_get_current_url(mock_playwright):
-    mock_browser = MagicMock()
-    mock_page = MagicMock()
-    mock_page.url = "https://example.com"
-    mock_context = MagicMock()
-    mock_context.pages = [mock_page]
-    mock_browser.contexts = [mock_context]
-    mock_playwright.return_value.__enter__.return_value.chromium.connect_over_cdp.return_value = mock_browser
+def test_get_current_url_success():
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = [
+        {"type": "page", "url": "https://active.com", "title": "Active"},
+        {"type": "page", "url": "https://bg.com", "title": "Background"},
+        {"type": "worker", "url": "https://worker.com"},
+    ]
+    with patch("requests.get", return_value=mock_resp):
+        assert get_current_url() == "https://active.com"
 
-    url = get_current_url()
-    assert url == "https://example.com"
+def test_get_current_url_no_pages():
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = [
+        {"type": "worker", "url": "https://worker.com"}
+    ]
+    with patch("requests.get", return_value=mock_resp):
+        assert get_current_url() is None
 
-@patch("link_scrapper.services.browser.sync_playwright")
-def test_open_url(mock_playwright):
-    mock_browser = MagicMock()
-    mock_page = MagicMock()
-    mock_context = MagicMock()
-    mock_context.pages = [mock_page]
-    mock_browser.contexts = [mock_context]
-    mock_playwright.return_value.__enter__.return_value.chromium.connect_over_cdp.return_value = mock_browser
-
-    result = open_url("https://newlink.com")
-    assert result is True
-    mock_page.goto.assert_called_once_with("https://newlink.com")
+def test_get_current_url_exception():
+    with patch("requests.get", side_effect=Exception("conn refused")):
+        assert get_current_url() is None

@@ -1,10 +1,6 @@
 import pytest
-from link_scrapper.queries.link_queries import GetNextLinkQuery, LinkDTO
+from link_scrapper.queries.link_queries import GetNextLinkQuery
 
-def test_query_creation():
+def test_get_next_link_query():
     q = GetNextLinkQuery()
     assert isinstance(q, GetNextLinkQuery)
-
-def test_dto_fields():
-    dto = LinkDTO(id=1, url="https://test.com", visited=True)
-    assert dto.url == "https://test.com"

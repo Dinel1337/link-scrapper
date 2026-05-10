@@ -1,43 +1,31 @@
-"""Глобальные горячие клавиши."""
 import keyboard
-from link_scrapper.services.browser import get_current_url, open_url
+from link_scrapper.container import container
 from link_scrapper.domain.commands import AddLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
+from link_scrapper.services.browser import get_current_url, open_url
 
-class HotkeyListener:
-    def __init__(self, command_handler, query_handler):
-        self._cmd_handler = command_handler
-        self._qry_handler = query_handler
-
-    def _on_less_than(self):
-        """Нажатие '<' — сохранить текущий URL."""
-        url = get_current_url()
-        if url:
-            self._cmd_handler.handle(AddLinkCommand(url))
-            print(f"Сохранено: {url}")
+def on_save():
+    url = get_current_url()
+    if url:
+        added = container.command_handler.handle(AddLinkCommand(url))
+        if added:
+            print(f"✓ Сохранена: {url}")
         else:
-            print("Не удалось получить URL активной вкладки")
+            print(f"→ Уже есть: {url}")
+    else:
+        print("Не удалось получить URL активной вкладки")
 
-    def _on_yo(self):
-        """Нажатие '`' (гравис) — перейти к следующей ссылке.
-        Используем '`' вместо 'ё', так как keyboard надёжнее ловит физическую клавишу.
-        На большинстве клавиатур клавиша 'ё' находится там же.
-        """
-        next_link = self._qry_handler.handle(GetNextLinkQuery())
-        if next_link:
-            if open_url(next_link.url):
-                print(f"Перешли на: {next_link.url}")
-            else:
-                print("Не удалось открыть URL")
-        else:
-            print("Нет сохранённых ссылок")
+def on_next():
+    next_url = container.query_handler.handle(GetNextLinkQuery())
+    if next_url:
+        open_url(next_url)
+        print(f"→ Переход: {next_url}")
+    else:
+        print("Все ссылки просмотрены или список пуст")
 
-    def start(self):
-        """Запустить слушатель (блокирующий вызов)."""
-        # '<' — физическая клавиша, работает в любой раскладке
-        keyboard.add_hotkey('<', self._on_less_than)
-        # '`' (гравис/тильда) — обычно там же, где 'ё' на русской раскладке
-        keyboard.add_hotkey('`', self._on_yo)
+keyboard.add_hotkey(',', on_save)
+keyboard.add_hotkey('`', on_next)
 
-        print("Слушатель запущен. '<' — сохранить, '`' — перейти. Ctrl+C для выхода.")
-        keyboard.wait()
+print("Горячие клавиши: ',' — сохранить текущий URL, '`' — следующая ссылка.")
+print("Для выхода нажмите Ctrl+C")
+keyboard.wait()
