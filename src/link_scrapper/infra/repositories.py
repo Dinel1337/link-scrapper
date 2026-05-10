@@ -25,19 +25,19 @@ class LinkCommandRepository:
         self.session.commit()
         return True
 
+    def delete_all(self) -> int:
+        count = self.session.query(Link).delete()
+        self.session.commit()
+        return count
+
 class LinkQueryRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def load_batch_after(self, last_id: int = 0, limit: int = 10) -> list[Link]:
-        stmt = (
-            select(Link)
-            .where(Link.visited == False, Link.id > last_id)
-            .order_by(Link.id)
-            .limit(limit)
-        )
-        return list(self.session.execute(stmt).scalars().all())
-
-    def mark_visited(self, link: Link) -> None:
-        link.visited = True
-        self.session.commit()
+    def get_next_unvisited(self) -> Link | None:
+        stmt = select(Link).where(Link.visited == False).order_by(Link.id).limit(1)
+        link = self.session.execute(stmt).scalar_one_or_none()
+        if link is not None:
+            link.visited = True
+            self.session.commit()
+        return link

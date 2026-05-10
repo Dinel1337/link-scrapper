@@ -5,9 +5,8 @@ from link_scrapper.domain.handler import CommandHandler, QueryHandler
 from link_scrapper.hotkeys.listener import Listener
 
 class Container:
-    def __init__(self, state_file='state.json'):
+    def __init__(self):
         self.session = SessionLocal()
-        self.state_file = state_file
 
     @property
     @lru_cache(maxsize=1)
@@ -27,14 +26,14 @@ class Container:
     @property
     @lru_cache(maxsize=1)
     def query_handler(self):
-        return QueryHandler(self.link_query_repo, state_path=self.state_file)
+        return QueryHandler(self.link_query_repo)
 
     def close(self):
         self.session.close()
 
-def create_app(state_file='state.json'):
+def create_app():
     init_db()
-    container = Container(state_file=state_file)
+    container = Container()
     listener = Listener(
         command_handler=container.command_handler,
         query_handler=container.query_handler
