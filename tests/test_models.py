@@ -20,7 +20,7 @@ def test_link_creation(session):
     session.commit()
     assert link.id is not None
     assert link.url == "https://example.com"
-    assert link.visited == False
+    assert not link.visited
     assert link.created_at is not None
 
 def test_link_unique_constraint(session):

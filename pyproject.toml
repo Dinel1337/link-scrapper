@@ -10,7 +10,6 @@ requires-python = ">=3.13"
 dependencies = [
     "keyboard>=0.13.5",
     "playwright>=1.59.0",
-    "psycopg2-binary>=2.9.12",
     "pynput>=1.8.1",
     "requests>=2.33.1",
     "sqlalchemy>=2.0.49",

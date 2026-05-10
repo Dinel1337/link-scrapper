@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch, MagicMock
 from link_scrapper.services.browser import get_current_url
 

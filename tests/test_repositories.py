@@ -24,8 +24,8 @@ def qry_repo(session):
     return LinkQueryRepository(session)
 
 def test_add_unique_link(cmd_repo):
-    assert cmd_repo.add("https://new.com") == True
-    assert cmd_repo.add("https://new.com") == False
+    assert cmd_repo.add("https://new.com")
+    assert not cmd_repo.add("https://new.com")
 
 def test_load_batch_after(qry_repo, session):
     for i in range(15):
@@ -55,4 +55,4 @@ def test_mark_visited(qry_repo, session):
     session.add(link)
     session.commit()
     qry_repo.mark_visited(link)
-    assert link.visited == True
+    assert link.visited

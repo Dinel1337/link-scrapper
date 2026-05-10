@@ -1,6 +1,6 @@
-import json
+﻿import json
 from pathlib import Path
-from link_scrapper.domain.commands import AddLinkCommand
+from link_scrapper.domain.commands import AddLinkCommand, DeleteLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
 from link_scrapper.infra.repositories import LinkCommandRepository, LinkQueryRepository
 from link_scrapper.domain.models import Link
@@ -11,8 +11,13 @@ class CommandHandler:
     def __init__(self, repo: LinkCommandRepository):
         self.repo = repo
 
-    def handle(self, cmd: AddLinkCommand) -> bool:
-        return self.repo.add(cmd.url)
+    def handle(self, cmd) -> bool:
+        if isinstance(cmd, AddLinkCommand):
+            return self.repo.add(cmd.url)
+        elif isinstance(cmd, DeleteLinkCommand):
+            return self.repo.delete(cmd.url)
+        else:
+            raise ValueError(f"Unknown command: {cmd}")
 
 class QueryHandler:
     def __init__(self, repo: LinkQueryRepository, state_path: str = STATE_FILE):
@@ -44,7 +49,6 @@ class QueryHandler:
 
     def _ensure_cache_has_items(self):
         if len(self.cache) - self.current_index <= 2:
-            # Подгружаем следующую партию после последнего id в кэше
             last_cached_id = self.cache[-1].id if self.cache else self.last_visited_id
             new_links = self.repo.load_batch_after(last_cached_id, limit=10)
             if new_links:

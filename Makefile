@@ -1,28 +1,7 @@
-.PHONY: test lint tox commit copy
+.PHONY: run
 
-test:
-	uv run pytest tests/ -v
-
-lint:
-	uv run ruff check .
-
-tox:
-	uv run tox
-
-ci: lint test
-	echo "✅ CI пройден"
-
-commit:
-	@read -p "Введите сообщение коммита: " msg; \
-	git add -A; \
-	git commit -m "$$msg | added via Makefile"; \
-	git push
-
-copy:
-	bash bin/!copyTreeProject.bash
-
-view-full:
-	@echo "y" | bash bin/!toggle_bash_view.bash
-
-view-clean:
-	@echo "n" | bash bin/!toggle_bash_view.bash
+run:
+	@powershell -Command "taskkill /F /IM msedge.exe *>utf8null; Write-Host 'Old Edge killed' -ForegroundColor DarkGray"
+	cmd /c start msedge --remote-debugging-port=9222
+	@powershell -Command "Write-Host 'Edge started' -ForegroundColor Green; Start-Sleep 2"
+	powershell -Command "uv run python main.py"

@@ -1,42 +1,42 @@
-from functools import lru_cache
-from link_scrapper.infra.db import get_session, init_db
+﻿from functools import lru_cache
+from link_scrapper.infra.db import SessionLocal, init_db
 from link_scrapper.infra.repositories import LinkCommandRepository, LinkQueryRepository
 from link_scrapper.domain.handler import CommandHandler, QueryHandler
+from link_scrapper.hotkeys.listener import Listener
 
 class Container:
-    def __init__(self, state_file="state.json"):
-        self._session = None
+    def __init__(self, state_file='state.json'):
+        self.session = SessionLocal()
         self.state_file = state_file
 
     @property
-    def session(self):
-        if self._session is None:
-            self._session = next(get_session())
-        return self._session
-
-    @property
     @lru_cache(maxsize=1)
-    def link_command_repo(self) -> LinkCommandRepository:
+    def link_command_repo(self):
         return LinkCommandRepository(self.session)
 
     @property
     @lru_cache(maxsize=1)
-    def link_query_repo(self) -> LinkQueryRepository:
+    def link_query_repo(self):
         return LinkQueryRepository(self.session)
 
     @property
     @lru_cache(maxsize=1)
-    def command_handler(self) -> CommandHandler:
+    def command_handler(self):
         return CommandHandler(self.link_command_repo)
 
     @property
     @lru_cache(maxsize=1)
-    def query_handler(self) -> QueryHandler:
-        return QueryHandler(self.link_query_repo, state_file=self.state_file)
+    def query_handler(self):
+        return QueryHandler(self.link_query_repo, state_path=self.state_file)
 
     def close(self):
-        if self._session:
-            self._session.close()
-            self._session = None
+        self.session.close()
 
-container = Container()
+def create_app(state_file='state.json'):
+    init_db()
+    container = Container(state_file=state_file)
+    listener = Listener(
+        command_handler=container.command_handler,
+        query_handler=container.query_handler
+    )
+    return listener

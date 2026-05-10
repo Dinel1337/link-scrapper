@@ -1,4 +1,5 @@
-import pytest, json
+import pytest
+import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from link_scrapper.domain.models import Base, Link
@@ -31,8 +32,8 @@ def qry_handler(session, tmp_path):
     return QueryHandler(LinkQueryRepository(session), str(state))
 
 def test_add_command(cmd_handler):
-    assert cmd_handler.handle(AddLinkCommand("https://new.com")) == True
-    assert cmd_handler.handle(AddLinkCommand("https://new.com")) == False
+    assert cmd_handler.handle(AddLinkCommand("https://new.com"))
+    assert not cmd_handler.handle(AddLinkCommand("https://new.com"))
 
 def test_query_handler_caching(qry_handler):
     url = qry_handler.handle(GetNextLinkQuery())
