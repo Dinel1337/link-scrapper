@@ -1,16 +1,10 @@
 ﻿import sys
-from link_scrapper.infra.db import SessionLocal, init_db
-from link_scrapper.infra.repositories import LinkCommandRepository
+from link_scrapper.container import create_app
 
 if __name__ == '__main__':
-    init_db()
-    if len(sys.argv) > 1 and sys.argv[1] == '-d':
-        session = SessionLocal()
-        repo = LinkCommandRepository(session)
-        deleted = repo.delete_all()
-        session.close()
-        print(f'Deleted {deleted} link(s) from database.')
-    else:
-        from link_scrapper.container import create_app
-        app = create_app()
+    reset = '--save' not in sys.argv
+    app = create_app(reset_visited=reset)
+    try:
         app.start()
+    finally:
+        app.close()

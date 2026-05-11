@@ -1,9 +1,8 @@
 ﻿import requests
-from playwright.sync_api import sync_playwright
 
 def get_current_url() -> str | None:
     try:
-        resp = requests.get('http://127.0.0.1:9222/json')
+        resp = requests.get('http://127.0.0.1:9222/json', timeout=2)
         pages = resp.json()
         web_pages = [p for p in pages if p.get('type') == 'page']
         return web_pages[0]['url'] if web_pages else None
@@ -11,27 +10,37 @@ def get_current_url() -> str | None:
         print(f'Error getting URL: {e}')
         return None
 
-def open_url(url: str) -> None:
+def open_url(browser, url: str) -> None:
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222')
-            active_page = None
-            for context in browser.contexts:
-                for page in context.pages:
-                    try:
-                        if page.evaluate('document.visibilityState') == 'visible':
-                            active_page = page
-                            break
-                    except:
-                        pass
-                if active_page:
+        # Определяем активную вкладку через HTTP (быстро)
+        resp = requests.get('http://127.0.0.1:9222/json', timeout=2)
+        pages = resp.json()
+        web_pages = [p for p in pages if p.get('type') == 'page']
+        if not web_pages:
+            print('No open pages found')
+            return
+        active_url = web_pages[0]['url']
+
+        # Ищем страницу с таким же URL
+        target_page = None
+        for context in browser.contexts:
+            for page in context.pages:
+                if page.url == active_url:
+                    target_page = page
                     break
-            if active_page is None:
-                # fallback – самая первая страница первого контекста
-                if browser.contexts and browser.contexts[0].pages:
-                    active_page = browser.contexts[0].pages[0]
-            if active_page:
-                active_page.goto(url)
-            browser.close()
+            if target_page:
+                break
+
+        # Fallback
+        if target_page is None and browser.contexts:
+            for context in browser.contexts:
+                if context.pages:
+                    target_page = context.pages[0]
+                    break
+
+        if target_page:
+            target_page.goto(url)
+        else:
+            print('No page available for navigation')
     except Exception as e:
         print(f'Error opening URL: {e}')

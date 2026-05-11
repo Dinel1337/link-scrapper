@@ -31,11 +31,12 @@ class Container:
     def close(self):
         self.session.close()
 
-def create_app():
+def create_app(reset_visited=False):
     init_db()
     container = Container()
     listener = Listener(
         command_handler=container.command_handler,
-        query_handler=container.query_handler
+        query_handler=container.query_handler,
+        reset_visited=reset_visited
     )
     return listener

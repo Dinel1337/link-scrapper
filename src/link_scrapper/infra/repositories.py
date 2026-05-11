@@ -1,4 +1,4 @@
-﻿from sqlalchemy import select
+﻿from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from link_scrapper.domain.models import Link
 
@@ -29,6 +29,12 @@ class LinkCommandRepository:
         count = self.session.query(Link).delete()
         self.session.commit()
         return count
+
+    def reset_all_visited(self) -> int:
+        stmt = update(Link).values(visited=False)
+        result = self.session.execute(stmt)
+        self.session.commit()
+        return result.rowcount
 
 class LinkQueryRepository:
     def __init__(self, session: Session):

@@ -2,6 +2,8 @@
 from link_scrapper.domain.commands import AddLinkCommand, DeleteLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
 from link_scrapper.services.browser import get_current_url, open_url
+from playwright.sync_api import sync_playwright
+import sys
 
 class BrowserHistory:
     def __init__(self):
@@ -33,13 +35,29 @@ class BrowserHistory:
         self.forward_stack.clear()
 
 class Listener:
-    def __init__(self, command_handler, query_handler):
+    def __init__(self, command_handler, query_handler, reset_visited=False):
         self.cmd_handler = command_handler
         self.qry_handler = query_handler
         self.history = BrowserHistory()
+        self.playwright = None
+        self.browser = None
+
+        # Сброс visited при обычном запуске
+        if reset_visited:
+            self.cmd_handler.repo.delete_all()  # удаляет все ссылки (или сброс visited?)
+            # delete_all удаляет все записи, нужно просто сбросить visited.
+            # У нас нет метода reset_visited – добавим в репозиторий.
+            self.cmd_handler.repo.reset_all_visited()
+
+        # Захватываем текущий URL как стартовый
         start_url = get_current_url()
         if start_url:
             self.history.reset(start_url)
+
+    def _ensure_browser(self):
+        if self.browser is None:
+            self.playwright = sync_playwright().start()
+            self.browser = self.playwright.chromium.connect_over_cdp('http://127.0.0.1:9222')
 
     def _on_save(self):
         try:
@@ -71,9 +89,10 @@ class Listener:
 
     def _on_next(self):
         try:
+            self._ensure_browser()
             next_url = self.qry_handler.handle(GetNextLinkQuery())
             if next_url:
-                open_url(next_url)
+                open_url(self.browser, next_url)
                 self.history.visit(next_url)
                 print(f'Next: {next_url}')
             else:
@@ -83,12 +102,25 @@ class Listener:
 
     def _on_prev(self):
         try:
+            self._ensure_browser()
             prev = self.history.go_back()
             if prev:
-                open_url(prev)
+                open_url(self.browser, prev)
                 print(f'Back: {prev}')
             else:
                 print('No back history')
+        except Exception as e:
+            print(f'Error: {e}')
+
+    def _on_forward(self):
+        try:
+            self._ensure_browser()
+            fwd = self.history.go_forward()
+            if fwd:
+                open_url(self.browser, fwd)
+                print(f'Forward: {fwd}')
+            else:
+                print('No forward history')
         except Exception as e:
             print(f'Error: {e}')
 
@@ -98,12 +130,19 @@ class Listener:
             print(f'Current URL: {url}')
         except Exception as e:
             print(f'Error: {e}')
-    
+
     def start(self):
         keyboard.add_hotkey('grave', self._on_save)
         keyboard.add_hotkey('.', self._on_next)
         keyboard.add_hotkey(',', self._on_prev)
+        keyboard.add_hotkey('/', self._on_forward)   # forward
         keyboard.add_hotkey('f2', self._on_delete)
         keyboard.add_hotkey('f12', self._print_url)
-        print("Hotkeys:  save | . next | , back | F2 delete | F12 print URL | Ctrl+C to exit")
+        print("Hotkeys:  save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
         keyboard.wait()
+
+    def close(self):
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
