@@ -5,8 +5,9 @@ from link_scrapper.domain.handler import CommandHandler, QueryHandler
 from link_scrapper.hotkeys.listener import Listener
 
 class Container:
-    def __init__(self):
+    def __init__(self, reverse=False):
         self.session = SessionLocal()
+        self.reverse = reverse
 
     @property
     @lru_cache(maxsize=1)
@@ -26,14 +27,14 @@ class Container:
     @property
     @lru_cache(maxsize=1)
     def query_handler(self):
-        return QueryHandler(self.link_query_repo)
+        return QueryHandler(self.link_query_repo, reverse=self.reverse)
 
     def close(self):
         self.session.close()
 
-def create_app(reset_visited=False):
+def create_app(reset_visited=False, reverse=False):
     init_db()
-    container = Container()
+    container = Container(reverse=reverse)
     listener = Listener(
         command_handler=container.command_handler,
         query_handler=container.query_handler,

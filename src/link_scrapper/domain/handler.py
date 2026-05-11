@@ -15,9 +15,13 @@ class CommandHandler:
             raise ValueError(f"Unknown command: {cmd}")
 
 class QueryHandler:
-    def __init__(self, repo: LinkQueryRepository):
+    def __init__(self, repo: LinkQueryRepository, reverse=False):
         self.repo = repo
+        self.reverse = reverse
 
     def handle(self, query: GetNextLinkQuery) -> str | None:
-        link = self.repo.get_next_unvisited()
+        if self.reverse:
+            link = self.repo.get_next_unvisited_reverse()
+        else:
+            link = self.repo.get_next_unvisited()
         return link.url if link else None

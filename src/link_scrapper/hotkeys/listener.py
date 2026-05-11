@@ -134,13 +134,13 @@ class Listener:
             print(f'Error: {e}')
 
     def start(self):
-        keyboard.add_hotkey('`', self._on_save)       # обратный апостроф — сохранить
-        keyboard.add_hotkey('.', self._on_next)
-        keyboard.add_hotkey(',', self._on_prev)
+        keyboard.add_hotkey('insert', self._on_save)       # обратный апостроф — сохранить
+        keyboard.add_hotkey('page up', self._on_next)
+        keyboard.add_hotkey('page down', self._on_prev)
         keyboard.add_hotkey('/', self._on_forward)
-        keyboard.add_hotkey('f2', self._on_delete)
+        keyboard.add_hotkey('delete', self._on_delete)
         keyboard.add_hotkey('f12', self._print_url)
-        print("Hotkeys: ` save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
+        # print("Hotkeys: ` save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
         while not self._stop_event.is_set():
             self._stop_event.wait(timeout=0.5)
         keyboard.unhook_all()

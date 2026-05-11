@@ -10,6 +10,9 @@ class LinkCommandRepository:
         stmt = select(Link).where(Link.url == url)
         existing = self.session.execute(stmt).scalar_one_or_none()
         if existing is not None:
+            if existing.visited:
+                existing.visited = False
+                self.session.commit()
             return False
         link = Link(url=url)
         self.session.add(link)
@@ -51,6 +54,14 @@ class LinkQueryRepository:
 
     def get_next_unvisited(self) -> Link | None:
         stmt = select(Link).where(Link.visited == False).order_by(Link.id).limit(1)
+        link = self.session.execute(stmt).scalar_one_or_none()
+        if link is not None:
+            link.visited = True
+            self.session.commit()
+        return link
+
+    def get_next_unvisited_reverse(self) -> Link | None:
+        stmt = select(Link).where(Link.visited == False).order_by(Link.id.desc()).limit(1)
         link = self.session.execute(stmt).scalar_one_or_none()
         if link is not None:
             link.visited = True
