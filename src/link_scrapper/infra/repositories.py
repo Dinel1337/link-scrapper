@@ -36,6 +36,15 @@ class LinkCommandRepository:
         self.session.commit()
         return result.rowcount
 
+    def set_visited(self, url: str, visited: bool) -> bool:
+        stmt = select(Link).where(Link.url == url)
+        link = self.session.execute(stmt).scalar_one_or_none()
+        if link is None:
+            return False
+        link.visited = visited
+        self.session.commit()
+        return True
+
 class LinkQueryRepository:
     def __init__(self, session: Session):
         self.session = session

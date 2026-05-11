@@ -1,9 +1,9 @@
 ﻿import keyboard
+import threading
 from link_scrapper.domain.commands import AddLinkCommand, DeleteLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
 from link_scrapper.services.browser import get_current_url, open_url
 from playwright.sync_api import sync_playwright
-import sys
 
 class BrowserHistory:
     def __init__(self):
@@ -41,15 +41,11 @@ class Listener:
         self.history = BrowserHistory()
         self.playwright = None
         self.browser = None
+        self._stop_event = threading.Event()
 
-        # Сброс visited при обычном запуске
         if reset_visited:
-            self.cmd_handler.repo.delete_all()  # удаляет все ссылки (или сброс visited?)
-            # delete_all удаляет все записи, нужно просто сбросить visited.
-            # У нас нет метода reset_visited – добавим в репозиторий.
             self.cmd_handler.repo.reset_all_visited()
 
-        # Захватываем текущий URL как стартовый
         start_url = get_current_url()
         if start_url:
             self.history.reset(start_url)
@@ -103,8 +99,11 @@ class Listener:
     def _on_prev(self):
         try:
             self._ensure_browser()
+            current_url = get_current_url()
             prev = self.history.go_back()
             if prev:
+                if current_url:
+                    self.cmd_handler.repo.set_visited(current_url, False)
                 open_url(self.browser, prev)
                 print(f'Back: {prev}')
             else:
@@ -115,8 +114,11 @@ class Listener:
     def _on_forward(self):
         try:
             self._ensure_browser()
+            current_url = get_current_url()
             fwd = self.history.go_forward()
             if fwd:
+                if current_url:
+                    self.cmd_handler.repo.set_visited(current_url, False)
                 open_url(self.browser, fwd)
                 print(f'Forward: {fwd}')
             else:
@@ -132,17 +134,27 @@ class Listener:
             print(f'Error: {e}')
 
     def start(self):
-        keyboard.add_hotkey('grave', self._on_save)
+        keyboard.add_hotkey('`', self._on_save)       # обратный апостроф — сохранить
         keyboard.add_hotkey('.', self._on_next)
         keyboard.add_hotkey(',', self._on_prev)
-        keyboard.add_hotkey('/', self._on_forward)   # forward
+        keyboard.add_hotkey('/', self._on_forward)
         keyboard.add_hotkey('f2', self._on_delete)
         keyboard.add_hotkey('f12', self._print_url)
-        print("Hotkeys:  save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
-        keyboard.wait()
+        print("Hotkeys: ` save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
+        while not self._stop_event.is_set():
+            self._stop_event.wait(timeout=0.5)
+        keyboard.unhook_all()
 
-    def close(self):
+    def stop(self):
+        self._stop_event.set()
         if self.browser:
-            self.browser.close()
+            try:
+                self.browser.close()
+            except:
+                pass
         if self.playwright:
-            self.playwright.stop()
+            try:
+                self.playwright.stop()
+            except:
+                pass
+        print("Listener stopped.")
