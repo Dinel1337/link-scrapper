@@ -32,12 +32,13 @@ class Container:
     def close(self):
         self.session.close()
 
-def create_app(reset_visited=False, reverse=False):
+def create_app(reset_visited=False, reverse=False, auto_interval=0):
     init_db()
     container = Container(reverse=reverse)
     listener = Listener(
         command_handler=container.command_handler,
         query_handler=container.query_handler,
-        reset_visited=reset_visited
+        reset_visited=reset_visited,
+        auto_interval=auto_interval
     )
     return listener

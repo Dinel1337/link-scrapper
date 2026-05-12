@@ -1,8 +1,10 @@
 ﻿import keyboard
 import threading
+import time
 from link_scrapper.domain.commands import AddLinkCommand, DeleteLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
 from link_scrapper.services.browser import get_current_url, open_url
+from link_scrapper.services.templates import register_templates, MESSAGE_CLASSES, generate_template
 from playwright.sync_api import sync_playwright
 
 class BrowserHistory:
@@ -35,13 +37,16 @@ class BrowserHistory:
         self.forward_stack.clear()
 
 class Listener:
-    def __init__(self, command_handler, query_handler, reset_visited=False):
+    def __init__(self, command_handler, query_handler, reset_visited=False, auto_interval=1):
         self.cmd_handler = command_handler
         self.qry_handler = query_handler
         self.history = BrowserHistory()
         self.playwright = None
         self.browser = None
         self._stop_event = threading.Event()
+        self.auto_interval = auto_interval
+        self._auto_timer = None
+        self._template_index = 0
 
         if reset_visited:
             self.cmd_handler.repo.reset_all_visited()
@@ -93,6 +98,7 @@ class Listener:
                 print(f'Next: {next_url}')
             else:
                 print('No more unvisited links')
+                self.stop()
         except Exception as e:
             print(f'Error: {e}')
 
@@ -133,14 +139,45 @@ class Listener:
         except Exception as e:
             print(f'Error: {e}')
 
+    def _auto_loop(self):
+        """Автоматический цикл: ждём → генерируем → вставляем → Enter → следующая ссылка."""
+        time.sleep(2)
+        while not self._stop_event.is_set():
+            self._stop_event.wait(timeout=self.auto_interval)
+            if self._stop_event.is_set():
+                break
+
+            text = generate_template(self._template_index)
+            keyboard.write(text, delay=0.02)
+            print(f"  [{self._template_index+1}/{len(MESSAGE_CLASSES)}] {text}")
+            self._template_index = (self._template_index + 1) % len(MESSAGE_CLASSES)
+
+            self._stop_event.wait(timeout=1)
+            if self._stop_event.is_set():
+                break
+
+            keyboard.press_and_release('enter')
+            print("  → Sent")
+
+            self._stop_event.wait(timeout=2)
+            if self._stop_event.is_set():
+                break
+
+            self._on_next()
+
     def start(self):
-        keyboard.add_hotkey('insert', self._on_save)       # обратный апостроф — сохранить
-        keyboard.add_hotkey('page up', self._on_next)
-        keyboard.add_hotkey('page down', self._on_prev)
+        keyboard.add_hotkey('`', self._on_save)
+        keyboard.add_hotkey('.', self._on_next)
+        keyboard.add_hotkey(',', self._on_prev)
         keyboard.add_hotkey('/', self._on_forward)
-        keyboard.add_hotkey('delete', self._on_delete)
+        keyboard.add_hotkey('f2', self._on_delete)
         keyboard.add_hotkey('f12', self._print_url)
-        # print("Hotkeys: ` save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
+        print("Hotkeys: ` save | . next | , back | / forward | F2 delete | F12 print URL | Ctrl+C to exit")
+        
+        if self.auto_interval > 0:
+            self._auto_timer = threading.Thread(target=self._auto_loop, daemon=True)
+            self._auto_timer.start()
+            print(f"🤖 Auto-mode ON: every {self.auto_interval}s → paste → Enter → next")
         while not self._stop_event.is_set():
             self._stop_event.wait(timeout=0.5)
         keyboard.unhook_all()
