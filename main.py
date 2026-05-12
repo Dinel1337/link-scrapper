@@ -1,5 +1,4 @@
 ﻿import sys
-import time
 from link_scrapper.container import create_app
 
 if __name__ == '__main__':
@@ -7,7 +6,6 @@ if __name__ == '__main__':
     reverse = '-r' in sys.argv or '--reverse' in sys.argv
     auto_interval = 0
     if '--auto' in sys.argv:
-        time.sleep(2)
         idx = sys.argv.index('--auto')
         if idx + 1 < len(sys.argv):
             try:
