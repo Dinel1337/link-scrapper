@@ -1,10 +1,11 @@
 ﻿import keyboard
 import threading
 import time
+import queue
 from link_scrapper.domain.commands import AddLinkCommand, DeleteLinkCommand
 from link_scrapper.queries.link_queries import GetNextLinkQuery
 from link_scrapper.services.browser import get_current_url, open_url
-from link_scrapper.services.templates import generate_message
+from link_scrapper.services.templates import generate_message, MESSAGE_CLASSES
 from playwright.sync_api import sync_playwright
 
 class BrowserHistory:
@@ -37,7 +38,7 @@ class BrowserHistory:
         self.forward_stack.clear()
 
 class Listener:
-    def __init__(self, command_handler, query_handler, reset_visited=False, auto_interval=0):
+    def __init__(self, command_handler, query_handler, reset_visited=False, auto_interval=0, skip=0, count=0):
         self.cmd_handler = command_handler
         self.qry_handler = query_handler
         self.history = BrowserHistory()
@@ -45,30 +46,132 @@ class Listener:
         self.browser = None
         self._stop_event = threading.Event()
         self.auto_interval = auto_interval
-        self.msg_counter = 0  # счётчик для последовательной генерации сообщений
+        self.msg_counter = 0
+        self.cmd_queue = queue.Queue()
+        self._auto_timer = None
+        self._auto_state = None
+        self.chats_processed = 0
+        self.max_chats = count          # 0 = без ограничений
 
         if reset_visited:
             self.cmd_handler.repo.reset_all_visited()
+
+        for _ in range(skip):
+            if self.qry_handler.handle(GetNextLinkQuery()) is None:
+                break
 
         start_url = get_current_url()
         if start_url:
             self.history.reset(start_url)
 
     def _ensure_browser(self):
-        if self.browser is None:
-            self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.connect_over_cdp('http://127.0.0.1:9222')
+        try:
+            self.browser.close()
+        except:
+            pass
+        try:
+            self.playwright.stop()
+        except:
+            pass
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.connect_over_cdp('http://127.0.0.1:9222')
 
-    def _send_message_bruteforce(self):
-        """Генерирует сообщение по текущему счётчику, печатает и отправляет."""
-        text = generate_message(self.msg_counter)
-        self.msg_counter += 1
-        time.sleep(0.2)
+    def _send_message(self, index: int):
+        text = generate_message(index)
         keyboard.write(text, delay=0.02)
         keyboard.send('enter')
-        print(f'Auto-sent: {text}', flush=True)
+        print(f'Auto-sent [{index+1}/7]: {text}', flush=True)
 
-    def _on_save(self):
+    # ---------- неблокирующий авто‑шаг ----------
+    def _start_auto_step(self):
+        if self._auto_state is None:
+            self._auto_state = {'stage': 'open', 'msg_i': 0}
+
+        state = self._auto_state
+
+        if state['stage'] == 'open':
+            try:
+                self._ensure_browser()
+            except Exception as e:
+                print(f'Browser reconnect failed: {e}', flush=True)
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+
+            next_url = self.qry_handler.handle(GetNextLinkQuery())
+            if not next_url:
+                print('No more unvisited links', flush=True)
+                self._auto_state = None
+                return True
+
+            try:
+                open_url(self.browser, next_url)
+            except Exception as e:
+                print(f'Error opening URL, skipping: {next_url}', flush=True)
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+
+            self.history.visit(next_url)
+            print(f'Next: {next_url}', flush=True)
+            state['stage'] = 'wait_load'
+            state['wait_start'] = time.time()
+            return False
+
+        elif state['stage'] == 'wait_load':
+            if time.time() - state['wait_start'] < 2.0:
+                return False
+            state['stage'] = 'messages'
+            state['msg_i'] = 0
+            return False
+
+        elif state['stage'] == 'messages':
+            if state['msg_i'] >= 7 or self._stop_event.is_set():
+                print(f'--- Finished chat, waiting {self.auto_interval}s ---', flush=True)
+                self.chats_processed += 1
+                # проверка лимита
+                if self.max_chats > 0 and self.chats_processed >= self.max_chats:
+                    print(f'Reached limit of {self.max_chats} chats. Auto-mode stopped.', flush=True)
+                    self._auto_state = None
+                    return True   # завершаем, больше не планируем
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+            try:
+                self._send_message(self.msg_counter)
+                self.msg_counter += 1
+                state['msg_i'] += 1
+            except Exception as e:
+                print(f'Send message failed: {e}', flush=True)
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+            state['stage'] = 'wait_msg'
+            state['wait_start'] = time.time()
+            return False
+
+        elif state['stage'] == 'wait_msg':
+            if time.time() - state['wait_start'] < 0.3:
+                return False
+            state['stage'] = 'messages'
+            return False
+
+        return False
+
+    def _schedule_next_auto(self):
+        if self._stop_event.is_set():
+            return
+        if self._auto_timer:
+            self._auto_timer.cancel()
+        self._auto_timer = threading.Timer(
+            self.auto_interval,
+            lambda: self.cmd_queue.put('auto_step')
+        )
+        self._auto_timer.daemon = True
+        self._auto_timer.start()
+
+    # ---------- ручные команды ----------
+    def _do_save(self):
         try:
             url = get_current_url()
             if url:
@@ -82,7 +185,7 @@ class Listener:
         except Exception as e:
             print(f'Error saving: {e}', flush=True)
 
-    def _on_delete(self):
+    def _do_delete(self):
         try:
             url = get_current_url()
             if url:
@@ -96,7 +199,7 @@ class Listener:
         except Exception as e:
             print(f'Error deleting: {e}', flush=True)
 
-    def _on_next(self):
+    def _do_next(self):
         try:
             self._ensure_browser()
             next_url = self.qry_handler.handle(GetNextLinkQuery())
@@ -109,7 +212,7 @@ class Listener:
         except Exception as e:
             print(f'Error: {e}', flush=True)
 
-    def _on_prev(self):
+    def _do_prev(self):
         try:
             self._ensure_browser()
             current_url = get_current_url()
@@ -124,7 +227,7 @@ class Listener:
         except Exception as e:
             print(f'Error: {e}', flush=True)
 
-    def _on_forward(self):
+    def _do_forward(self):
         try:
             self._ensure_browser()
             current_url = get_current_url()
@@ -139,23 +242,26 @@ class Listener:
         except Exception as e:
             print(f'Error: {e}', flush=True)
 
-    def _print_url(self):
+    def _do_print_url(self):
         try:
             url = get_current_url()
             print(f'Current URL: {url}', flush=True)
         except Exception as e:
             print(f'Error: {e}', flush=True)
 
-    def _auto_loop(self):
-        while not self._stop_event.is_set():
-            self._on_next()                   # переходим на следующий чат
-            if self._stop_event.is_set():
-                return
-            time.sleep(1.5)                   # ждём загрузку страницы и фокус поля
-            self._send_message_bruteforce()   # отправляем сообщение с последовательной генерацией
-            if self._stop_event.is_set():
-                return
-            time.sleep(self.auto_interval)    # пауза перед следующим чатом
+    # ---------- колбэки клавиш ----------
+    def _on_save(self):
+        self.cmd_queue.put('save')
+    def _on_delete(self):
+        self.cmd_queue.put('delete')
+    def _on_next(self):
+        self.cmd_queue.put('next')
+    def _on_prev(self):
+        self.cmd_queue.put('prev')
+    def _on_forward(self):
+        self.cmd_queue.put('forward')
+    def _print_url(self):
+        self.cmd_queue.put('print_url')
 
     def start(self):
         keyboard.add_hotkey('insert', self._on_save)
@@ -171,26 +277,54 @@ class Listener:
         print("  Page Up   - Next unvisited link", flush=True)
         print("  Page Down - Back in history", flush=True)
         print("  Home/F12  - Show current URL", flush=True)
+
         if self.auto_interval > 0:
-            print(f"  Auto-mode: switching every {self.auto_interval} sec with sequential unique messages", flush=True)
-            threading.Thread(target=self._auto_loop, daemon=True).start()
+            limit_str = f", limit: {self.max_chats} chats" if self.max_chats > 0 else ""
+            print(f"  Auto-mode: 7 messages per chat, interval: {self.auto_interval}s{limit_str}", flush=True)
+            self.cmd_queue.put('auto_step')
 
         while not self._stop_event.is_set():
-            self._stop_event.wait(timeout=0.5)
+            try:
+                while True:
+                    cmd = self.cmd_queue.get_nowait()
+                    if cmd == 'save':
+                        self._do_save()
+                    elif cmd == 'delete':
+                        self._do_delete()
+                    elif cmd == 'next':
+                        self._do_next()
+                    elif cmd == 'prev':
+                        self._do_prev()
+                    elif cmd == 'forward':
+                        self._do_forward()
+                    elif cmd == 'print_url':
+                        self._do_print_url()
+                    elif cmd == 'auto_step':
+                        self._start_auto_step()
+            except queue.Empty:
+                pass
+
+            if self._auto_state is not None:
+                finished = self._start_auto_step()
+                if finished:
+                    self._auto_state = None
+
+            time.sleep(0.05)
+
         keyboard.unhook_all()
 
     def stop(self):
         self._stop_event.set()
-        if self.browser:
-            try:
-                self.browser.close()
-            except:
-                pass
-        if self.playwright:
-            try:
-                self.playwright.stop()
-            except:
-                pass
+        if self._auto_timer:
+            self._auto_timer.cancel()
+        try:
+            self.browser.close()
+        except:
+            pass
+        try:
+            self.playwright.stop()
+        except:
+            pass
         print("Listener stopped.", flush=True)
 
     def close(self):
