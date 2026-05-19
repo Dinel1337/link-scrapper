@@ -182,12 +182,12 @@ class Listener:
         return False
 
     def _is_chat_unavailable(self):
-        """Проверяет наличие элемента с классом magritte-text_style-secondary___1IU11_5-1-0."""
+        """Проверяет наличие элемента с классом magritte-text_style-secondary (любая версия)."""
         for context in self.browser.contexts:
             for page in context.pages:
                 try:
-                    # Ищем любой элемент, у которого класс содержит эту подстроку
-                    locator = page.locator('[class*="magritte-text_style-secondary___1IU11_5-1-0"]')
+                    # Ищем любой элемент, у которого class содержит 'magritte-text_style-secondary'
+                    locator = page.locator('[class*="magritte-text_style-secondary"]')
                     if locator.count() > 0:
                         return True
                 except:
