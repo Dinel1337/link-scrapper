@@ -51,7 +51,7 @@ class Listener:
         self._auto_timer = None
         self._auto_state = None
         self.chats_processed = 0
-        self.max_chats = count          # 0 = без ограничений
+        self.max_chats = count
 
         if reset_visited:
             self.cmd_handler.repo.reset_all_visited()
@@ -85,7 +85,7 @@ class Listener:
     # ---------- неблокирующий авто‑шаг ----------
     def _start_auto_step(self):
         if self._auto_state is None:
-            self._auto_state = {'stage': 'open', 'msg_i': 0}
+            self._auto_state = {'stage': 'open', 'msg_i': 0, 'next_url': None}
 
         state = self._auto_state
 
@@ -104,6 +104,7 @@ class Listener:
                 self._auto_state = None
                 return True
 
+            state['next_url'] = next_url
             try:
                 open_url(self.browser, next_url)
             except Exception as e:
@@ -121,6 +122,17 @@ class Listener:
         elif state['stage'] == 'wait_load':
             if time.time() - state['wait_start'] < 2.0:
                 return False
+
+            # Единая проверка по классу (все стоп‑сообщения используют этот класс)
+            if self._is_chat_unavailable():
+                next_url = state.get('next_url')
+                print(f'Chat unavailable, deleting and skipping: {next_url}', flush=True)
+                if next_url:
+                    self.cmd_handler.handle(DeleteLinkCommand(next_url))
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+
             state['stage'] = 'messages'
             state['msg_i'] = 0
             return False
@@ -129,14 +141,24 @@ class Listener:
             if state['msg_i'] >= 7 or self._stop_event.is_set():
                 print(f'--- Finished chat, waiting {self.auto_interval}s ---', flush=True)
                 self.chats_processed += 1
-                # проверка лимита
                 if self.max_chats > 0 and self.chats_processed >= self.max_chats:
                     print(f'Reached limit of {self.max_chats} chats. Auto-mode stopped.', flush=True)
                     self._auto_state = None
-                    return True   # завершаем, больше не планируем
+                    return True
                 self._schedule_next_auto()
                 self._auto_state = None
                 return True
+
+            # Дополнительная проверка перед каждым сообщением
+            if self._is_chat_unavailable():
+                next_url = state.get('next_url')
+                print(f'Chat became unavailable, deleting and skipping: {next_url}', flush=True)
+                if next_url:
+                    self.cmd_handler.handle(DeleteLinkCommand(next_url))
+                self._schedule_next_auto()
+                self._auto_state = None
+                return True
+
             try:
                 self._send_message(self.msg_counter)
                 self.msg_counter += 1
@@ -146,6 +168,7 @@ class Listener:
                 self._schedule_next_auto()
                 self._auto_state = None
                 return True
+
             state['stage'] = 'wait_msg'
             state['wait_start'] = time.time()
             return False
@@ -156,6 +179,19 @@ class Listener:
             state['stage'] = 'messages'
             return False
 
+        return False
+
+    def _is_chat_unavailable(self):
+        """Проверяет наличие элемента с классом magritte-text_style-secondary___1IU11_5-1-0."""
+        for context in self.browser.contexts:
+            for page in context.pages:
+                try:
+                    # Ищем любой элемент, у которого класс содержит эту подстроку
+                    locator = page.locator('[class*="magritte-text_style-secondary___1IU11_5-1-0"]')
+                    if locator.count() > 0:
+                        return True
+                except:
+                    pass
         return False
 
     def _schedule_next_auto(self):
